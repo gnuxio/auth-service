@@ -1,0 +1,194 @@
+package handlers
+
+import (
+	"context"
+	"log"
+	"net/http"
+
+	"auth-microservice/internal/cognito"
+	"auth-microservice/internal/config"
+	"auth-microservice/internal/models"
+	"auth-microservice/internal/utils"
+)
+
+type AuthHandler struct {
+	cognitoClient *cognito.Client
+	config        *config.Config
+}
+
+// NewAuthHandler creates a new auth handler
+func NewAuthHandler(cognitoClient *cognito.Client, cfg *config.Config) *AuthHandler {
+	return &AuthHandler{
+		cognitoClient: cognitoClient,
+		config:        cfg,
+	}
+}
+
+// ValidateAccessToken validates an access token and returns the user info
+func (h *AuthHandler) ValidateAccessToken(ctx context.Context, accessToken string) (*models.User, error) {
+	return h.cognitoClient.GetUser(ctx, accessToken)
+}
+
+// Register handles user registration
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	var req models.RegisterRequest
+	if err := utils.ParseJSON(r, &req); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	if req.Email == "" || req.Password == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_fields", "Email and password are required")
+		return
+	}
+
+	if err := h.cognitoClient.SignUp(r.Context(), req.Email, req.Password, req.Name); err != nil {
+		log.Printf("Registration failed: %v", err)
+		utils.WriteError(w, http.StatusBadRequest, "registration_failed", err.Error())
+		return
+	}
+
+	response := models.AuthResponse{
+		Message: "Registration successful. Please check your email to verify your account.",
+	}
+
+	utils.WriteJSON(w, http.StatusCreated, response)
+}
+
+// Login handles user authentication
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req models.LoginRequest
+	if err := utils.ParseJSON(r, &req); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	if req.Email == "" || req.Password == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_fields", "Email and password are required")
+		return
+	}
+
+	log.Printf("Login request - username (email): %s", req.Email)
+
+	tokens, err := h.cognitoClient.Login(r.Context(), req.Email, req.Password)
+	if err != nil {
+		log.Printf("Login failed: %v", err)
+		utils.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Invalid email or password")
+		return
+	}
+
+	user, err := h.cognitoClient.GetUser(r.Context(), tokens.AccessToken)
+	if err != nil {
+		log.Printf("Failed to get user info: %v", err)
+		utils.WriteError(w, http.StatusInternalServerError, "user_info_failed", "Failed to retrieve user information")
+		return
+	}
+
+	cookieOpts := utils.CookieOptions{
+		Domain: h.config.CookieDomain,
+		Secure: h.config.CookieSecure,
+	}
+
+	utils.SetAuthCookies(w, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
+
+	response := models.AuthResponse{
+		User:    *user,
+		Message: "Login successful",
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}
+
+// Refresh handles token refresh
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	// Get refresh token from cookie
+	refreshToken, err := utils.GetCookieValue(r, utils.RefreshTokenCookie)
+	if err != nil {
+		utils.WriteError(w, http.StatusUnauthorized, "missing_refresh_token", "Refresh token not found")
+		return
+	}
+
+	// Get ID token to extract username for SECRET_HASH computation
+	idToken, err := utils.GetCookieValue(r, utils.IDTokenCookie)
+	if err != nil {
+		utils.WriteError(w, http.StatusUnauthorized, "missing_id_token", "ID token not found")
+		return
+	}
+
+	// Extract username from ID token
+	username, err := utils.GetUsernameFromIDToken(idToken)
+	if err != nil {
+		log.Printf("Failed to extract username from ID token: %v", err)
+		utils.WriteError(w, http.StatusUnauthorized, "invalid_token", "Failed to extract username from token")
+		return
+	}
+
+	log.Printf("Refresh token request - extracted username: %s", username)
+
+	tokens, err := h.cognitoClient.RefreshToken(r.Context(), refreshToken, username)
+	if err != nil {
+		log.Printf("Token refresh failed: %v", err)
+		utils.WriteError(w, http.StatusUnauthorized, "refresh_failed", "Failed to refresh token")
+		return
+	}
+
+	user, err := h.cognitoClient.GetUser(r.Context(), tokens.AccessToken)
+	if err != nil {
+		log.Printf("Failed to get user info: %v", err)
+		utils.WriteError(w, http.StatusInternalServerError, "user_info_failed", "Failed to retrieve user information")
+		return
+	}
+
+	cookieOpts := utils.CookieOptions{
+		Domain: h.config.CookieDomain,
+		Secure: h.config.CookieSecure,
+	}
+
+	utils.SetAuthCookies(w, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
+
+	response := models.AuthResponse{
+		User:    *user,
+		Message: "Token refreshed successfully",
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}
+
+// Logout handles user logout
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := utils.GetCookieValue(r, utils.AccessTokenCookie)
+	if err == nil && accessToken != "" {
+		if err = h.cognitoClient.GlobalSignOut(r.Context(), accessToken); err != nil {
+			log.Printf("Global signout failed: %v", err)
+		}
+	}
+
+	cookieOpts := utils.CookieOptions{
+		Domain: h.config.CookieDomain,
+		Secure: h.config.CookieSecure,
+	}
+
+	utils.ClearAuthCookies(w, cookieOpts)
+
+	response := models.AuthResponse{
+		Message: "Logout successful",
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}
+
+// Me returns the current authenticated user
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	user, ok := utils.GetUserFromContext(r.Context())
+	if !ok {
+		log.Printf("User not found in context despite auth middleware")
+		utils.WriteError(w, http.StatusInternalServerError, "server_error", "Failed to retrieve user from context")
+		return
+	}
+
+	response := models.AuthResponse{
+		User: *user,
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}
