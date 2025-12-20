@@ -19,6 +19,17 @@ type RefreshRequest struct{}
 // LogoutRequest is empty since logout just clears cookies
 type LogoutRequest struct{}
 
+// VerifyEmailRequest represents the email verification request payload
+type VerifyEmailRequest struct {
+	Email string `json:"email"`
+	Code  string `json:"code"`
+}
+
+// ResendVerificationRequest represents the resend verification code request payload
+type ResendVerificationRequest struct {
+	Email string `json:"email"`
+}
+
 // AuthResponse represents the successful authentication response
 type AuthResponse struct {
 	User    User   `json:"user"`

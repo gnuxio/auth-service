@@ -192,3 +192,55 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	utils.WriteJSON(w, http.StatusOK, response)
 }
+
+// VerifyEmail confirms a user's email with a verification code
+func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	var req models.VerifyEmailRequest
+	if err := utils.ParseJSON(r, &req); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	if req.Email == "" || req.Code == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_fields", "Email and verification code are required")
+		return
+	}
+
+	if err := h.cognitoClient.ConfirmSignUp(r.Context(), req.Email, req.Code); err != nil {
+		log.Printf("Email verification failed: %v", err)
+		utils.WriteError(w, http.StatusBadRequest, "verification_failed", "Invalid or expired verification code")
+		return
+	}
+
+	response := models.AuthResponse{
+		Message: "Email verified successfully. You can now log in.",
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}
+
+// ResendVerification resends the verification code to the user's email
+func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request) {
+	var req models.ResendVerificationRequest
+	if err := utils.ParseJSON(r, &req); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	if req.Email == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_fields", "Email is required")
+		return
+	}
+
+	if err := h.cognitoClient.ResendConfirmationCode(r.Context(), req.Email); err != nil {
+		log.Printf("Failed to resend verification code: %v", err)
+		utils.WriteError(w, http.StatusBadRequest, "resend_failed", "Failed to resend verification code")
+		return
+	}
+
+	response := models.AuthResponse{
+		Message: "Verification code sent. Please check your email.",
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}

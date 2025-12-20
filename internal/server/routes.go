@@ -15,6 +15,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// Public auth routes (no authentication required)
 	mux.HandleFunc("POST /auth/register", s.authHandler.Register)
 	mux.HandleFunc("POST /auth/login", s.authHandler.Login)
+	mux.HandleFunc("POST /auth/verify-email", s.authHandler.VerifyEmail)
+	mux.HandleFunc("POST /auth/resend-verification", s.authHandler.ResendVerification)
 
 	// Protected auth routes (authentication required)
 	mux.HandleFunc("POST /auth/refresh", s.authMiddleware(s.authHandler.Refresh))

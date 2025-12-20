@@ -182,3 +182,40 @@ func (c *Client) GlobalSignOut(ctx context.Context, accessToken string) error {
 
 	return nil
 }
+
+// ConfirmSignUp confirms a user's email with a verification code
+func (c *Client) ConfirmSignUp(ctx context.Context, email, code string) error {
+	secretHash := c.computeSecretHash(email)
+
+	input := &cognitoidentityprovider.ConfirmSignUpInput{
+		ClientId:         aws.String(c.clientID),
+		SecretHash:       aws.String(secretHash),
+		Username:         aws.String(email),
+		ConfirmationCode: aws.String(code),
+	}
+
+	_, err := c.client.ConfirmSignUp(ctx, input)
+	if err != nil {
+		return fmt.Errorf("email verification failed: %w", err)
+	}
+
+	return nil
+}
+
+// ResendConfirmationCode resends the verification code to the user's email
+func (c *Client) ResendConfirmationCode(ctx context.Context, email string) error {
+	secretHash := c.computeSecretHash(email)
+
+	input := &cognitoidentityprovider.ResendConfirmationCodeInput{
+		ClientId:   aws.String(c.clientID),
+		SecretHash: aws.String(secretHash),
+		Username:   aws.String(email),
+	}
+
+	_, err := c.client.ResendConfirmationCode(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to resend verification code: %w", err)
+	}
+
+	return nil
+}
