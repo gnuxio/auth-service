@@ -30,6 +30,18 @@ type ResendVerificationRequest struct {
 	Email string `json:"email"`
 }
 
+// ForgotPasswordRequest represents the forgot password request payload
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// ResetPasswordRequest represents the reset password request payload
+type ResetPasswordRequest struct {
+	Email       string `json:"email"`
+	Code        string `json:"code"`
+	NewPassword string `json:"new_password"`
+}
+
 // AuthResponse represents the successful authentication response
 type AuthResponse struct {
 	User    User   `json:"user"`

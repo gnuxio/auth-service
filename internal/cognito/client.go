@@ -219,3 +219,41 @@ func (c *Client) ResendConfirmationCode(ctx context.Context, email string) error
 
 	return nil
 }
+
+// ForgotPassword initiates the password reset process by sending a code to the user's email
+func (c *Client) ForgotPassword(ctx context.Context, email string) error {
+	secretHash := c.computeSecretHash(email)
+
+	input := &cognitoidentityprovider.ForgotPasswordInput{
+		ClientId:   aws.String(c.clientID),
+		SecretHash: aws.String(secretHash),
+		Username:   aws.String(email),
+	}
+
+	_, err := c.client.ForgotPassword(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to initiate password reset: %w", err)
+	}
+
+	return nil
+}
+
+// ConfirmForgotPassword completes the password reset process with the code and new password
+func (c *Client) ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error {
+	secretHash := c.computeSecretHash(email)
+
+	input := &cognitoidentityprovider.ConfirmForgotPasswordInput{
+		ClientId:         aws.String(c.clientID),
+		SecretHash:       aws.String(secretHash),
+		Username:         aws.String(email),
+		ConfirmationCode: aws.String(code),
+		Password:         aws.String(newPassword),
+	}
+
+	_, err := c.client.ConfirmForgotPassword(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to reset password: %w", err)
+	}
+
+	return nil
+}

@@ -244,3 +244,55 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 
 	utils.WriteJSON(w, http.StatusOK, response)
 }
+
+// ForgotPassword initiates the password reset process
+func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req models.ForgotPasswordRequest
+	if err := utils.ParseJSON(r, &req); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	if req.Email == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_fields", "Email is required")
+		return
+	}
+
+	if err := h.cognitoClient.ForgotPassword(r.Context(), req.Email); err != nil {
+		log.Printf("Failed to initiate password reset: %v", err)
+		utils.WriteError(w, http.StatusBadRequest, "forgot_password_failed", "Failed to initiate password reset")
+		return
+	}
+
+	response := models.AuthResponse{
+		Message: "Password reset code sent. Please check your email.",
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}
+
+// ResetPassword completes the password reset process
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req models.ResetPasswordRequest
+	if err := utils.ParseJSON(r, &req); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	if req.Email == "" || req.Code == "" || req.NewPassword == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_fields", "Email, code, and new password are required")
+		return
+	}
+
+	if err := h.cognitoClient.ConfirmForgotPassword(r.Context(), req.Email, req.Code, req.NewPassword); err != nil {
+		log.Printf("Password reset failed: %v", err)
+		utils.WriteError(w, http.StatusBadRequest, "reset_password_failed", "Invalid or expired code, or password does not meet requirements")
+		return
+	}
+
+	response := models.AuthResponse{
+		Message: "Password reset successful. You can now log in with your new password.",
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}
