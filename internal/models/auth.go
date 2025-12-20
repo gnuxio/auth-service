@@ -42,6 +42,12 @@ type ResetPasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
+// ChangePasswordRequest represents the change password request payload for authenticated users
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 // AuthResponse represents the successful authentication response
 type AuthResponse struct {
 	User    User   `json:"user"`

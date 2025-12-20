@@ -257,3 +257,19 @@ func (c *Client) ConfirmForgotPassword(ctx context.Context, email, code, newPass
 
 	return nil
 }
+
+// ChangePassword changes the password for an authenticated user
+func (c *Client) ChangePassword(ctx context.Context, accessToken, previousPassword, proposedPassword string) error {
+	input := &cognitoidentityprovider.ChangePasswordInput{
+		AccessToken:      aws.String(accessToken),
+		PreviousPassword: aws.String(previousPassword),
+		ProposedPassword: aws.String(proposedPassword),
+	}
+
+	_, err := c.client.ChangePassword(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to change password: %w", err)
+	}
+
+	return nil
+}

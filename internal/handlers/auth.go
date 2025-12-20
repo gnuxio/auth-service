@@ -296,3 +296,36 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 	utils.WriteJSON(w, http.StatusOK, response)
 }
+
+// ChangePassword allows authenticated users to change their password
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req models.ChangePasswordRequest
+	if err := utils.ParseJSON(r, &req); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_fields", "Current password and new password are required")
+		return
+	}
+
+	// Get access token from cookie
+	accessToken, err := utils.GetCookieValue(r, utils.AccessTokenCookie)
+	if err != nil {
+		utils.WriteError(w, http.StatusUnauthorized, "missing_access_token", "Access token not found")
+		return
+	}
+
+	if err := h.cognitoClient.ChangePassword(r.Context(), accessToken, req.CurrentPassword, req.NewPassword); err != nil {
+		log.Printf("Password change failed: %v", err)
+		utils.WriteError(w, http.StatusBadRequest, "change_password_failed", "Invalid current password or new password does not meet requirements")
+		return
+	}
+
+	response := models.AuthResponse{
+		Message: "Password changed successfully.",
+	}
+
+	utils.WriteJSON(w, http.StatusOK, response)
+}
