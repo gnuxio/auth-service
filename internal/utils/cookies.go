@@ -17,7 +17,7 @@ type CookieOptions struct {
 }
 
 // SetAuthCookies sets all authentication cookies (access, ID, and refresh tokens)
-func SetAuthCookies(w http.ResponseWriter, r *http.Request, accessToken, idToken, refreshToken string, expiresIn int32, opts CookieOptions) {
+func SetAuthCookies(w http.ResponseWriter, accessToken, idToken, refreshToken string, expiresIn int32, opts CookieOptions) {
 	// Access token cookie
 	setSecureCookie(w, AccessTokenCookie, accessToken, int(expiresIn), opts)
 

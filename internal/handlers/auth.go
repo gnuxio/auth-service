@@ -35,7 +35,7 @@ func (h *AuthHandler) getCookieOptions(r *http.Request) utils.CookieOptions {
 	// For local development, we don't set the domain, allowing the browser to use the host from the request.
 	if isLocal {
 		return utils.CookieOptions{
-			Domain: "", // Let the browser handle it for localhost.
+			Domain: "",    // Let the browser handle it for localhost.
 			Secure: false, // Cookies for localhost should not be Secure.
 		}
 	}
@@ -93,9 +93,23 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Login request - username (email): %s", req.Email)
 
+	tokens, err := h.cognitoClient.Login(r.Context(), req.Email, req.Password)
+	if err != nil {
+		log.Printf("Login failed: %v", err)
+		utils.WriteError(w, http.StatusUnauthorized, "authentication_failed", "Invalid email or password")
+		return
+	}
+
+	user, err := h.cognitoClient.GetUser(r.Context(), tokens.AccessToken)
+	if err != nil {
+		log.Printf("Failed to get user info: %v", err)
+		utils.WriteError(w, http.StatusInternalServerError, "user_info_failed", "Failed to retrieve user information")
+		return
+	}
+
 	cookieOpts := h.getCookieOptions(r)
 
-	utils.SetAuthCookies(w, r, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
+	utils.SetAuthCookies(w, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
 
 	response := models.AuthResponse{
 		User:    *user,
@@ -147,7 +161,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	cookieOpts := h.getCookieOptions(r)
 
-	utils.SetAuthCookies(w, r, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
+	utils.SetAuthCookies(w, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
 
 	response := models.AuthResponse{
 		User:    *user,
