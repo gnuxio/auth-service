@@ -2,7 +2,6 @@ package utils
 
 import (
 	"net/http"
-	"strings"
 )
 
 const (
@@ -19,24 +18,14 @@ type CookieOptions struct {
 
 // SetAuthCookies sets all authentication cookies (access, ID, and refresh tokens)
 func SetAuthCookies(w http.ResponseWriter, r *http.Request, accessToken, idToken, refreshToken string, expiresIn int32, opts CookieOptions) {
-	// Config to set localhost frontend
-	origin := r.Header.Get("Origin")
-	isLocalDev := strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1")
-
-	cookieOpts := opts
-	if isLocalDev {
-		cookieOpts.Domain = ""
-		cookieOpts.Secure = false
-	}
-
 	// Access token cookie
-	setSecureCookie(w, AccessTokenCookie, accessToken, int(expiresIn), cookieOpts, isLocalDev)
+	setSecureCookie(w, AccessTokenCookie, accessToken, int(expiresIn), opts)
 
 	// ID token cookie
-	setSecureCookie(w, IDTokenCookie, idToken, int(expiresIn), cookieOpts, isLocalDev)
+	setSecureCookie(w, IDTokenCookie, idToken, int(expiresIn), opts)
 
 	// Refresh token cookie
-	setSecureCookie(w, RefreshTokenCookie, refreshToken, 30*24*60*60, cookieOpts, isLocalDev)
+	setSecureCookie(w, RefreshTokenCookie, refreshToken, 30*24*60*60, opts)
 }
 
 // ClearAuthCookies removes all authentication cookies
@@ -56,10 +45,12 @@ func GetCookieValue(r *http.Request, name string) (string, error) {
 }
 
 // setSecureCookie creates a secure, httpOnly cookie
-func setSecureCookie(w http.ResponseWriter, name, value string, maxAge int, opts CookieOptions, isLocalDev bool) {
-	sameSite := http.SameSiteNoneMode
-	if isLocalDev {
-		sameSite = http.SameSiteLaxMode
+func setSecureCookie(w http.ResponseWriter, name, value string, maxAge int, opts CookieOptions) {
+	// Use SameSite=Lax for local development (when Secure is false)
+	// Use SameSite=None for production (when Secure is true) to allow cross-site cookies
+	sameSite := http.SameSiteLaxMode
+	if opts.Secure {
+		sameSite = http.SameSiteNoneMode
 	}
 
 	cookie := &http.Cookie{
