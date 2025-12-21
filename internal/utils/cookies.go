@@ -2,6 +2,7 @@ package utils
 
 import (
 	"net/http"
+	"strings"
 )
 
 const (
@@ -17,16 +18,25 @@ type CookieOptions struct {
 }
 
 // SetAuthCookies sets all authentication cookies (access, ID, and refresh tokens)
-func SetAuthCookies(w http.ResponseWriter, accessToken, idToken, refreshToken string, expiresIn int32, opts CookieOptions) {
-	// Access token cookie (short-lived, typically 1 hour)
-	setSecureCookie(w, AccessTokenCookie, accessToken, int(expiresIn), opts)
+func SetAuthCookies(w http.ResponseWriter, r *http.Request, accessToken, idToken, refreshToken string, expiresIn int32, opts CookieOptions) {
+	// Config to set localhost frontend
+	origin := r.Header.Get("Origin")
+	isLocalDev := strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1")
 
-	// ID token cookie (same expiration as access token)
-	setSecureCookie(w, IDTokenCookie, idToken, int(expiresIn), opts)
+	cookieOpts := opts
+	if isLocalDev {
+		cookieOpts.Domain = ""
+		cookieOpts.Secure = false
+	}
 
-	// Refresh token cookie (long-lived, typically 30 days)
-	// Cognito refresh tokens are valid for 30 days by default
-	setSecureCookie(w, RefreshTokenCookie, refreshToken, 30*24*60*60, opts)
+	// Access token cookie
+	setSecureCookie(w, AccessTokenCookie, accessToken, int(expiresIn), cookieOpts, isLocalDev)
+
+	// ID token cookie
+	setSecureCookie(w, IDTokenCookie, idToken, int(expiresIn), cookieOpts, isLocalDev)
+
+	// Refresh token cookie
+	setSecureCookie(w, RefreshTokenCookie, refreshToken, 30*24*60*60, cookieOpts, isLocalDev)
 }
 
 // ClearAuthCookies removes all authentication cookies
@@ -46,7 +56,12 @@ func GetCookieValue(r *http.Request, name string) (string, error) {
 }
 
 // setSecureCookie creates a secure, httpOnly cookie
-func setSecureCookie(w http.ResponseWriter, name, value string, maxAge int, opts CookieOptions) {
+func setSecureCookie(w http.ResponseWriter, name, value string, maxAge int, opts CookieOptions, isLocalDev bool) {
+	sameSite := http.SameSiteNoneMode
+	if isLocalDev {
+		sameSite = http.SameSiteLaxMode
+	}
+
 	cookie := &http.Cookie{
 		Name:     name,
 		Value:    value,
@@ -54,7 +69,7 @@ func setSecureCookie(w http.ResponseWriter, name, value string, maxAge int, opts
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   opts.Secure,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: sameSite,
 	}
 
 	if opts.Domain != "" {

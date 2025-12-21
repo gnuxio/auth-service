@@ -89,7 +89,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Secure: h.config.CookieSecure,
 	}
 
-	utils.SetAuthCookies(w, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
+	utils.SetAuthCookies(w, r, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
 
 	response := models.AuthResponse{
 		User:    *user,
@@ -144,7 +144,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		Secure: h.config.CookieSecure,
 	}
 
-	utils.SetAuthCookies(w, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
+	utils.SetAuthCookies(w, r, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
 
 	response := models.AuthResponse{
 		User:    *user,
