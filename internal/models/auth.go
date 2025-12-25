@@ -13,8 +13,10 @@ type RegisterRequest struct {
 	Name     string `json:"name,omitempty"`
 }
 
-// RefreshRequest is empty since refresh token comes from cookie
-type RefreshRequest struct{}
+// RefreshRequest represents the refresh token request payload
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
 
 // LogoutRequest is empty since logout just clears cookies
 type LogoutRequest struct{}
@@ -50,8 +52,12 @@ type ChangePasswordRequest struct {
 
 // AuthResponse represents the successful authentication response
 type AuthResponse struct {
-	User    User   `json:"user"`
-	Message string `json:"message,omitempty"`
+	User         User   `json:"user"`
+	Message      string `json:"message,omitempty"`
+	AccessToken  string `json:"access_token,omitempty"`
+	IDToken      string `json:"id_token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	ExpiresIn    int32  `json:"expires_in,omitempty"`
 }
 
 // User represents the authenticated user data

@@ -11,10 +11,10 @@ import (
 // authMiddleware validates the access token and adds user info to the request context
 func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Extract access token from cookie
-		accessToken, err := utils.GetCookieValue(r, utils.AccessTokenCookie)
+		// Extract access token from Authorization header
+		accessToken, err := utils.ExtractBearerToken(r)
 		if err != nil {
-			utils.WriteError(w, http.StatusUnauthorized, "unauthorized", "No access token found")
+			utils.WriteError(w, http.StatusUnauthorized, "unauthorized", "Missing or invalid Authorization header")
 			return
 		}
 

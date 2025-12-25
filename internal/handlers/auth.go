@@ -107,13 +107,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cookieOpts := h.getCookieOptions(r)
-
-	utils.SetAuthCookies(w, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
-
 	response := models.AuthResponse{
-		User:    *user,
-		Message: "Login successful",
+		User:         *user,
+		Message:      "Login successful",
+		AccessToken:  tokens.AccessToken,
+		IDToken:      tokens.IDToken,
+		RefreshToken: tokens.RefreshToken,
+		ExpiresIn:    tokens.ExpiresIn,
 	}
 
 	utils.WriteJSON(w, http.StatusOK, response)
@@ -121,51 +121,49 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 // Refresh handles token refresh
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	// Get refresh token from cookie
-	refreshToken, err := utils.GetCookieValue(r, utils.RefreshTokenCookie)
-	if err != nil {
-		utils.WriteError(w, http.StatusUnauthorized, "missing_refresh_token", "Refresh token not found")
+	// Get refresh token from request body
+	var req models.RefreshRequest
+	if err := utils.ParseJSON(r, &req); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
 		return
 	}
 
-	// Get ID token to extract username for SECRET_HASH computation
-	idToken, err := utils.GetCookieValue(r, utils.IDTokenCookie)
-	if err != nil {
-		utils.WriteError(w, http.StatusUnauthorized, "missing_id_token", "ID token not found")
+	if req.RefreshToken == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_refresh_token", "Refresh token is required")
 		return
 	}
 
-	// Extract username from ID token
-	username, err := utils.GetUsernameFromIDToken(idToken)
-	if err != nil {
-		log.Printf("Failed to extract username from ID token: %v", err)
-		utils.WriteError(w, http.StatusUnauthorized, "invalid_token", "Failed to extract username from token")
+	// Get username from authenticated user (from middleware context)
+	user, ok := utils.GetUserFromContext(r.Context())
+	if !ok {
+		utils.WriteError(w, http.StatusUnauthorized, "unauthorized", "User not found in context")
 		return
 	}
+	username := user.Email
 
-	log.Printf("Refresh token request - extracted username: %s", username)
+	log.Printf("Refresh token request - username: %s", username)
 
-	tokens, err := h.cognitoClient.RefreshToken(r.Context(), refreshToken, username)
+	tokens, err := h.cognitoClient.RefreshToken(r.Context(), req.RefreshToken, username)
 	if err != nil {
 		log.Printf("Token refresh failed: %v", err)
 		utils.WriteError(w, http.StatusUnauthorized, "refresh_failed", "Failed to refresh token")
 		return
 	}
 
-	user, err := h.cognitoClient.GetUser(r.Context(), tokens.AccessToken)
+	updatedUser, err := h.cognitoClient.GetUser(r.Context(), tokens.AccessToken)
 	if err != nil {
 		log.Printf("Failed to get user info: %v", err)
 		utils.WriteError(w, http.StatusInternalServerError, "user_info_failed", "Failed to retrieve user information")
 		return
 	}
 
-	cookieOpts := h.getCookieOptions(r)
-
-	utils.SetAuthCookies(w, tokens.AccessToken, tokens.IDToken, tokens.RefreshToken, tokens.ExpiresIn, cookieOpts)
-
 	response := models.AuthResponse{
-		User:    *user,
-		Message: "Token refreshed successfully",
+		User:         *updatedUser,
+		Message:      "Token refreshed successfully",
+		AccessToken:  tokens.AccessToken,
+		IDToken:      tokens.IDToken,
+		RefreshToken: tokens.RefreshToken,
+		ExpiresIn:    tokens.ExpiresIn,
 	}
 
 	utils.WriteJSON(w, http.StatusOK, response)
@@ -173,22 +171,23 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 // Logout handles user logout
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	accessToken, err := utils.GetCookieValue(r, utils.AccessTokenCookie)
-	if err == nil && accessToken != "" {
-		if err = h.cognitoClient.GlobalSignOut(r.Context(), accessToken); err != nil {
-			log.Printf("Global signout failed: %v", err)
-		}
+	// Extract access token from Authorization header
+	accessToken, err := utils.ExtractBearerToken(r)
+	if err != nil {
+		utils.WriteError(w, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
 	}
 
-	cookieOpts := h.getCookieOptions(r)
-
-	utils.ClearAuthCookies(w, cookieOpts)
-
-	response := models.AuthResponse{
-		Message: "Logout successful",
+	// Perform global sign out in Cognito
+	if err := h.cognitoClient.GlobalSignOut(r.Context(), accessToken); err != nil {
+		log.Printf("Global signout failed: %v", err)
+		utils.WriteError(w, http.StatusInternalServerError, "signout_failed", "Failed to sign out")
+		return
 	}
 
-	utils.WriteJSON(w, http.StatusOK, response)
+	utils.WriteJSON(w, http.StatusOK, map[string]string{
+		"message": "Logged out successfully",
+	})
 }
 
 // Me returns the current authenticated user
@@ -324,10 +323,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get access token from cookie
-	accessToken, err := utils.GetCookieValue(r, utils.AccessTokenCookie)
+	// Get access token from Authorization header
+	accessToken, err := utils.ExtractBearerToken(r)
 	if err != nil {
-		utils.WriteError(w, http.StatusUnauthorized, "missing_access_token", "Access token not found")
+		utils.WriteError(w, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
 
