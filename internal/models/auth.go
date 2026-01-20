@@ -16,6 +16,7 @@ type RegisterRequest struct {
 // RefreshRequest represents the refresh token request payload
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
+	Email        string `json:"email"`
 }
 
 // LogoutRequest is empty since logout just clears cookies

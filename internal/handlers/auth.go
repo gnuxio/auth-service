@@ -133,13 +133,12 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get username from authenticated user (from middleware context)
-	user, ok := utils.GetUserFromContext(r.Context())
-	if !ok {
-		utils.WriteError(w, http.StatusUnauthorized, "unauthorized", "User not found in context")
+	// Get email from request body (no middleware required for refresh)
+	if req.Email == "" {
+		utils.WriteError(w, http.StatusBadRequest, "missing_email", "Email is required")
 		return
 	}
-	username := user.Email
+	username := req.Email
 
 	log.Printf("Refresh token request - username: %s", username)
 

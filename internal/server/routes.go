@@ -20,8 +20,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 	mux.HandleFunc("POST /auth/forgot-password", s.authHandler.ForgotPassword)
 	mux.HandleFunc("POST /auth/reset-password", s.authHandler.ResetPassword)
 
+	// Refresh endpoint - NO auth middleware (refresh token is the only credential needed)
+	mux.HandleFunc("POST /auth/refresh", s.authHandler.Refresh)
+
 	// Protected auth routes (authentication required)
-	mux.HandleFunc("POST /auth/refresh", s.authMiddleware(s.authHandler.Refresh))
 	mux.HandleFunc("POST /auth/logout", s.authMiddleware(s.authHandler.Logout))
 	mux.HandleFunc("GET /auth/me", s.authMiddleware(s.authHandler.Me))
 	mux.HandleFunc("POST /auth/change-password", s.authMiddleware(s.authHandler.ChangePassword))
